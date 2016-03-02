@@ -59,6 +59,8 @@ public class WSDLParser {
 	private boolean stringsOnly;
 	
 	private String namespace;
+	
+	private TypeRegistryImpl registry;
 
 	public WSDLParser(InputStream container, boolean stringsOnly) throws IOException, ParseException, SAXException, ParserConfigurationException {
 		this(XMLUtils.toDocument(container, true), stringsOnly);
@@ -351,6 +353,14 @@ public class WSDLParser {
 		return message;
 	}
 
+	
+	public void register(TypeRegistry...registries) {
+		if (registry == null) {
+			registry = new TypeRegistryImpl();
+		}
+		registry.register(registries);
+	}
+
 	private TypeRegistry parseTypes(Element element) throws SAXException, ParseException, IOException {
 		List<Document> delayed = new ArrayList<Document>();
 		ModifiableTypeRegistry registry = new TypeRegistryImpl();
@@ -369,6 +379,11 @@ public class WSDLParser {
 				}
 			}
 			XMLSchema schema = new XMLSchema(document, stringsOnly);
+			// if we have added custom registries, set them in the XML parser
+			if (registry != null) {
+				schema.register(registry);
+				schema.setPrioritizeIncludes(true);
+			}
 			schema.setResolver(getResolver());
 			try {
 				schema.parse();
@@ -386,6 +401,10 @@ public class WSDLParser {
 			exceptions.clear();
 			while (iterator.hasNext()) {
 				XMLSchema schema = new XMLSchema(iterator.next(), stringsOnly);
+				if (registry != null) {
+					schema.register(registry);
+					schema.setPrioritizeIncludes(true);
+				}
 				schema.setResolver(getResolver());
 				try {
 					schema.parse();
