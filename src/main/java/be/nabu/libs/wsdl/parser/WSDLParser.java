@@ -65,6 +65,8 @@ public class WSDLParser {
 	
 	private TypeRegistryImpl registry;
 	
+	private String id;
+	
 	public WSDLParser(InputStream container, boolean stringsOnly) throws IOException, ParseException, SAXException, ParserConfigurationException {
 		this(XMLUtils.toDocument(container, true), stringsOnly);
 	}
@@ -398,6 +400,9 @@ public class WSDLParser {
 				}
 			}
 			XMLSchema schema = new XMLSchema(document, stringsOnly);
+			if (id != null) {
+				schema.setId(id + ".schema" + (schemas.size() + 1));
+			}
 			// if we have added custom registries, set them in the XML parser
 			if (this.registry != null) {
 				schema.register(this.registry);
@@ -421,6 +426,9 @@ public class WSDLParser {
 			exceptions.clear();
 			while (iterator.hasNext()) {
 				XMLSchema schema = new XMLSchema(iterator.next(), stringsOnly);
+				if (id != null) {
+					schema.setId(id + ".schema" + (schemas.size() + 1));
+				}
 				if (this.registry != null) {
 					schema.register(this.registry);
 					schema.setPrioritizeIncludes(true);
@@ -468,4 +476,13 @@ public class WSDLParser {
 		return resolver;
 	}
 
+	public String getId() {
+		return id;
+	}
+
+	public void setId(String id) {
+		this.id = id;
+	}
+
+	
 }
