@@ -21,6 +21,7 @@ public class WSDLDefinitionImpl implements WSDLDefinition {
 	private List<Service> services = new ArrayList<Service>();
 	private List<PolicyProvider> policies = new ArrayList<PolicyProvider>();
 	private TypeRegistry registry;
+	private Double soapVersion;
 	
 	@Override
 	public String getTargetNamespace() {
@@ -84,6 +85,14 @@ public class WSDLDefinitionImpl implements WSDLDefinition {
 	}
 	public void setRegistry(TypeRegistry registry) {
 		this.registry = registry;
+	}
+	
+	@Override
+	public Double getSoapVersion() {
+		return soapVersion;
+	}
+	public void setSoapVersion(Double soapVersion) {
+		this.soapVersion = soapVersion;
 	}
 
 }

@@ -6,6 +6,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -47,7 +48,9 @@ public class WSDLParser {
 
 	public static final String NAMESPACE = "http://schemas.xmlsoap.org/wsdl/";
 	public static final String SOAP_HTTP_NAMESPACE = "http://schemas.xmlsoap.org/soap/http";
-	public static final String SOAP_NAMESPACE = "http://schemas.xmlsoap.org/wsdl/soap/";
+	public static final String SOAP_NAMESPACE_11 = "http://schemas.xmlsoap.org/wsdl/soap/";
+	public static final String SOAP_NAMESPACE_12 = "http://schemas.xmlsoap.org/wsdl/soap12/";
+	public static final List<String> SOAP_NAMESPACES = Arrays.asList(SOAP_NAMESPACE_11, SOAP_NAMESPACE_12);
 
 	private WSDLDefinitionImpl definition = new WSDLDefinitionImpl();
 	private boolean parsed;
@@ -61,7 +64,7 @@ public class WSDLParser {
 	private String namespace;
 	
 	private TypeRegistryImpl registry;
-
+	
 	public WSDLParser(InputStream container, boolean stringsOnly) throws IOException, ParseException, SAXException, ParserConfigurationException {
 		this(XMLUtils.toDocument(container, true), stringsOnly);
 	}
@@ -81,6 +84,16 @@ public class WSDLParser {
 			}
 		}
 		return definition;
+	}
+	
+	private void setSoapNamespace(String soapNamespace) {
+		double soapVersion = SOAP_NAMESPACE_11.equals(soapNamespace) ? 1.1 : 1.2;
+		if (definition.getSoapVersion() == null) {
+			definition.setSoapVersion(soapVersion);
+		}
+		else if (soapVersion != definition.getSoapVersion()) {
+			throw new RuntimeException("Multiple soap namespaces detected");
+		}
 	}
 	
 	private List<Element> getChildren(Element element) {
@@ -166,7 +179,8 @@ public class WSDLParser {
 				throw new ParseException("Unexpected elements", 0);
 			}
 			else if (portChildren.size() == 1) {
-				if (SOAP_NAMESPACE.equals(portChildren.get(0).getNamespaceURI())) {
+				if (SOAP_NAMESPACES.contains(portChildren.get(0).getNamespaceURI())) {
+					setSoapNamespace(portChildren.get(0).getNamespaceURI());
 					if (portChildren.get(0).getLocalName().equals("address")) {
 						if (portChildren.get(0).hasAttribute("location")) {
 							servicePort.setEndpoint(portChildren.get(0).getAttribute("location"));
@@ -206,7 +220,8 @@ public class WSDLParser {
 		for (Element child : getChildren(element)) {
 			// if there is no style attribute, it is implicitly document (according to spec)
 			Style defaultStyle = null;
-			if (SOAP_NAMESPACE.equals(child.getNamespaceURI())) {
+			if (SOAP_NAMESPACES.contains(child.getNamespaceURI())) {
+				setSoapNamespace(child.getNamespaceURI());
 				if (child.getLocalName().equals("binding")) {
 					foundBinding = true;
 					if (child.hasAttribute("style")) {
@@ -233,7 +248,8 @@ public class WSDLParser {
 				bindingOperation.setOperation(operation);
 				bindingOperation.setStyle(defaultStyle);
 				for (Element operationChild : getChildren(child)) {
-					if (SOAP_NAMESPACE.equals(operationChild.getNamespaceURI())) {
+					if (SOAP_NAMESPACES.contains(operationChild.getNamespaceURI())) {
+						setSoapNamespace(operationChild.getNamespaceURI());
 						if (operationChild.getLocalName().equals("operation")) {
 							if (operationChild.hasAttribute("soapAction")) {
 								bindingOperation.setSoapAction(operationChild.getAttribute("soapAction"));
@@ -252,19 +268,20 @@ public class WSDLParser {
 							throw new ParseException("Unexpected elements", 0);
 						}
 						if (children.size() > 0) {
-							if (!SOAP_NAMESPACE.equals(children.get(0).getNamespaceURI())) {
+							if (!SOAP_NAMESPACES.contains(children.get(0).getNamespaceURI())) {
 								throw new ParseException("Unexpected elements", 0);
 							}
 							if (!children.get(0).getLocalName().equals("body")) {
 								throw new ParseException("Unexpected elements", 0);
 							}
+							setSoapNamespace(children.get(0).getNamespaceURI());
 							if (children.get(0).hasAttribute("use")) {
 								bindingOperation.setUse(Use.valueOf(children.get(0).getAttribute("use").toUpperCase()));
 							}
 						}
 					}
-					binding.getOperations().add(bindingOperation);
 				}
+				binding.getOperations().add(bindingOperation);
 			}
 		}
 		if (!foundBinding) {
@@ -364,6 +381,8 @@ public class WSDLParser {
 	private TypeRegistry parseTypes(Element element) throws SAXException, ParseException, IOException {
 		List<Document> delayed = new ArrayList<Document>();
 		ModifiableTypeRegistry registry = new TypeRegistryImpl();
+		List<TypeRegistry> schemas = new ArrayList<TypeRegistry>();
+		TypeRegistryResolver resolver = new TypeRegistryResolver(schemas, getResolver());
 		for (Element child : getChildren(element)) {
 			if (!child.getLocalName().equals("schema")) {
 				throw new ParseException("Unexpected element in the types element: " + child.getNodeName(), 0);
@@ -380,13 +399,14 @@ public class WSDLParser {
 			}
 			XMLSchema schema = new XMLSchema(document, stringsOnly);
 			// if we have added custom registries, set them in the XML parser
-			if (registry != null) {
-				schema.register(registry);
+			if (this.registry != null) {
+				schema.register(this.registry);
 				schema.setPrioritizeIncludes(true);
 			}
-			schema.setResolver(getResolver());
+			schema.setResolver(resolver);
 			try {
 				schema.parse();
+				schemas.add(schema);
 				registry.register(schema);
 			}
 			catch (Exception e) {
@@ -401,14 +421,15 @@ public class WSDLParser {
 			exceptions.clear();
 			while (iterator.hasNext()) {
 				XMLSchema schema = new XMLSchema(iterator.next(), stringsOnly);
-				if (registry != null) {
-					schema.register(registry);
+				if (this.registry != null) {
+					schema.register(this.registry);
 					schema.setPrioritizeIncludes(true);
 				}
-				schema.setResolver(getResolver());
+				schema.setResolver(resolver);
 				try {
 					schema.parse();
 					registry.register(schema);
+					schemas.add(schema);
 					iterator.remove();
 				}
 				catch (Exception e) {
@@ -446,5 +467,5 @@ public class WSDLParser {
 		}
 		return resolver;
 	}
-	
+
 }
