@@ -401,7 +401,7 @@ public class WSDLParser {
 			}
 			XMLSchema schema = new XMLSchema(document, stringsOnly);
 			if (id != null) {
-				schema.setId(id + ".schema" + (schemas.size() + 1));
+				schema.setId(id + ".types.schema" + (schemas.size() + 1));
 			}
 			// if we have added custom registries, set them in the XML parser
 			if (this.registry != null) {
@@ -427,7 +427,7 @@ public class WSDLParser {
 			while (iterator.hasNext()) {
 				XMLSchema schema = new XMLSchema(iterator.next(), stringsOnly);
 				if (id != null) {
-					schema.setId(id + ".schema" + (schemas.size() + 1));
+					schema.setId(id + ".types.schema" + (schemas.size() + 1));
 				}
 				if (this.registry != null) {
 					schema.register(this.registry);
