@@ -1,8 +1,12 @@
 package be.nabu.libs.wsdl.parser.impl;
 
+import java.util.List;
+
 import javax.xml.bind.annotation.XmlTransient;
 
 import be.nabu.libs.wsdl.api.BindingOperation;
+import be.nabu.libs.wsdl.api.BindingOperationMessage;
+import be.nabu.libs.wsdl.api.BindingOperationMessageLayout;
 import be.nabu.libs.wsdl.api.Operation;
 import be.nabu.libs.wsdl.api.Style;
 import be.nabu.libs.wsdl.api.Use;
@@ -15,6 +19,8 @@ public class BindingOperationImpl implements BindingOperation {
 	private Style style;
 	private Use use;
 	private WSDLDefinition definition;
+	private BindingOperationMessageLayout inputPartLayout, outputPartLayout;
+	private List<BindingOperationMessage> faults;
 	
 	@Override
 	public Operation getOperation() {
@@ -60,6 +66,30 @@ public class BindingOperationImpl implements BindingOperation {
 	@Override
 	public String getName() {
 		return operation.getName();
+	}
+	
+	@Override
+	public BindingOperationMessageLayout getInputPartLayout() {
+		return inputPartLayout;
+	}
+	public void setInputPartLayout(BindingOperationMessageLayout inputPartLayout) {
+		this.inputPartLayout = inputPartLayout;
+	}
+	
+	@Override
+	public BindingOperationMessageLayout getOutputPartLayout() {
+		return outputPartLayout;
+	}
+	public void setOutputPartLayout(BindingOperationMessageLayout outputPartLayout) {
+		this.outputPartLayout = outputPartLayout;
+	}
+	
+	@Override
+	public List<BindingOperationMessage> getFaults() {
+		return faults;
+	}
+	public void setFaults(List<BindingOperationMessage> faults) {
+		this.faults = faults;
 	}
 
 }

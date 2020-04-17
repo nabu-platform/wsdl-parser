@@ -25,7 +25,9 @@ import be.nabu.libs.types.xml.ResourceResolver;
 import be.nabu.libs.types.xml.XMLSchema;
 import be.nabu.libs.wsdl.WSDLUtils;
 import be.nabu.libs.wsdl.api.Binding;
+import be.nabu.libs.wsdl.api.BindingOperationMessage;
 import be.nabu.libs.wsdl.api.Message;
+import be.nabu.libs.wsdl.api.MessagePart;
 import be.nabu.libs.wsdl.api.Operation;
 import be.nabu.libs.wsdl.api.PortType;
 import be.nabu.libs.wsdl.api.Service;
@@ -35,6 +37,8 @@ import be.nabu.libs.wsdl.api.Use;
 import be.nabu.libs.wsdl.api.WSDLDefinition;
 import be.nabu.libs.wsdl.parser.impl.BindingImpl;
 import be.nabu.libs.wsdl.parser.impl.BindingOperationImpl;
+import be.nabu.libs.wsdl.parser.impl.BindingOperationMessageImpl;
+import be.nabu.libs.wsdl.parser.impl.BindingOperationMessageLayoutImpl;
 import be.nabu.libs.wsdl.parser.impl.MessageImpl;
 import be.nabu.libs.wsdl.parser.impl.MessagePartImpl;
 import be.nabu.libs.wsdl.parser.impl.OperationImpl;
@@ -249,6 +253,9 @@ public class WSDLParser {
 				}
 				bindingOperation.setOperation(operation);
 				bindingOperation.setStyle(defaultStyle);
+				bindingOperation.setInputPartLayout(new BindingOperationMessageLayoutImpl());
+				bindingOperation.setOutputPartLayout(new BindingOperationMessageLayoutImpl());
+				bindingOperation.setFaults(new ArrayList<BindingOperationMessage>());
 				for (Element operationChild : getChildren(child)) {
 					if (SOAP_NAMESPACES.contains(operationChild.getNamespaceURI())) {
 						setSoapNamespace(operationChild.getNamespaceURI());
@@ -266,19 +273,118 @@ public class WSDLParser {
 					}
 					else if (operationChild.getLocalName().equals("input") || operationChild.getLocalName().equals("output") || operationChild.getLocalName().equals("fault")) {
 						List<Element> children = getChildren(operationChild);
-						if (children.size() > 1) {
-							throw new ParseException("Unexpected elements", 0);
-						}
-						if (children.size() > 0) {
-							if (!SOAP_NAMESPACES.contains(children.get(0).getNamespaceURI())) {
-								throw new ParseException("Unexpected elements", 0);
+						for (int i = 0; i < children.size(); i++) {
+							if (!SOAP_NAMESPACES.contains(children.get(i).getNamespaceURI())) {
+								throw new ParseException("Unexpected elements in " + operationChild.getLocalName() + ": " + children.get(i).getLocalName(), 0);
 							}
-							if (!children.get(0).getLocalName().equals("body")) {
-								throw new ParseException("Unexpected elements", 0);
+							setSoapNamespace(children.get(i).getNamespaceURI());
+							// we define the body of the binding operation
+							// the body can only occur in the input or the output, not the fault
+							if (children.get(i).getLocalName().equals("body")) {
+								Message original = operationChild.getLocalName().equals("input") ? operation.getInput() : operation.getOutput();
+								BindingOperationMessageImpl body = new BindingOperationMessageImpl();
+								body.setParent(original);
+								body.setDefinition(original.getDefinition());
+								body.setName(original.getName());
+								String partsAttribute = children.get(i).getAttribute("parts");
+								// the parts attribute is optional, if we don't set it, we want all the parts of the original message
+								// otherwise we only want the parts we explicitly list here
+								if (partsAttribute != null && !partsAttribute.trim().isEmpty()) {
+									List<MessagePart> parts = new ArrayList<MessagePart>();
+									// its an nmtokens list which is whitespace separated
+									for (String part : partsAttribute.trim().split("[\\s]+")) {
+										for (MessagePart possible : original.getParts()) {
+											if (possible.getName().equals(part)) {
+												parts.add(possible);
+												break;
+											}
+										}
+									}
+									body.setParts(parts);
+								}
+								else {
+									body.setParts(original.getParts());
+								}
+								if (children.get(i).hasAttribute("use")) {
+									body.setUse(Use.valueOf(children.get(i).getAttribute("use").toUpperCase()));
+									// DEPRECATED: we now set it more specifically
+									bindingOperation.setUse(Use.valueOf(children.get(i).getAttribute("use").toUpperCase()));
+								}
+								if (operationChild.getLocalName().equals("input")) {
+									((BindingOperationMessageLayoutImpl) bindingOperation.getInputPartLayout()).setBody(body);
+								}
+								else {
+									((BindingOperationMessageLayoutImpl) bindingOperation.getOutputPartLayout()).setBody(body);
+								}
 							}
-							setSoapNamespace(children.get(0).getNamespaceURI());
-							if (children.get(0).hasAttribute("use")) {
-								bindingOperation.setUse(Use.valueOf(children.get(0).getAttribute("use").toUpperCase()));
+							else if (children.get(i).getLocalName().equals("header")) {
+								Message original = null;
+								String messageName = children.get(i).getAttribute("message");
+								if (messageName != null && !messageName.trim().isEmpty()) {
+									int index = messageName.indexOf(':');
+									String messageNamespace = children.get(i).lookupNamespaceURI(index < 0 ? null : messageName.substring(0, index));
+									if (index >= 0) {
+										messageName = messageName.substring(index + 1);
+									}
+									original = WSDLUtils.getMessage(definition, messageNamespace, messageName);
+								}
+								// not sure if this is allowed, but it looks like a good fallback?
+								if (original == null) {
+									original = operationChild.getLocalName().equals("input") ? operation.getInput() : operation.getOutput();
+								}
+								BindingOperationMessageImpl header = new BindingOperationMessageImpl();
+								header.setParent(original);
+								header.setDefinition(original.getDefinition());
+								header.setName(original.getName());
+								String partAttribute = children.get(i).getAttribute("part");
+								if (partAttribute != null && !partAttribute.trim().isEmpty()) {
+									List<MessagePart> parts = new ArrayList<MessagePart>();
+									for (MessagePart possible : original.getParts()) {
+										if (possible.getName().equals(partAttribute)) {
+											parts.add(possible);
+											break;
+										}
+									}
+									header.setParts(parts);
+								}
+								else {
+									header.setParts(original.getParts());
+								}
+								if (children.get(i).hasAttribute("use")) {
+									header.setUse(Use.valueOf(children.get(i).getAttribute("use").toUpperCase()));
+								}
+								if (operationChild.getLocalName().equals("input")) {
+									((BindingOperationMessageLayoutImpl) bindingOperation.getInputPartLayout()).setHeader(header);
+								}
+								else {
+									((BindingOperationMessageLayoutImpl) bindingOperation.getOutputPartLayout()).setHeader(header);
+								}
+							}
+							else if (children.get(i).getLocalName().equals("fault")) {
+								Message original = null;
+								String faultName = children.get(i).getAttribute("name");
+								if (faultName != null && !faultName.trim().isEmpty()) {
+									for (Message fault : operation.getFaults()) {
+										if (fault.getName().equals(faultName)) {
+											original = fault;
+											break;
+										}
+									}
+								}
+								if (original != null) {
+									BindingOperationMessageImpl fault = new BindingOperationMessageImpl();
+									fault.setParent(original);
+									fault.setDefinition(original.getDefinition());
+									fault.setName(original.getName());
+									fault.setParts(original.getParts());
+									if (children.get(i).hasAttribute("use")) {
+										fault.setUse(Use.valueOf(children.get(i).getAttribute("use").toUpperCase()));
+									}
+									if (bindingOperation.getFaults() == null) {
+										((BindingOperationImpl) bindingOperation).setFaults(new ArrayList<BindingOperationMessage>());
+									}
+									bindingOperation.getFaults().add(fault);
+								}
 							}
 						}
 					}
@@ -318,6 +424,16 @@ public class WSDLParser {
 				Message message = WSDLUtils.getMessage(definition, namespace, messageName);
 				if (message == null) {
 					throw new ParseException("Can not find message " + messageName + " in namespace " +  namespace, 0);
+				}
+				String localName = operationChild.getAttribute("name");
+				// if we have a different local name (does anyone do that?) we use the message extension to make this clear
+				if (localName != null && !localName.trim().isEmpty() && !localName.equals(message.getName())) {
+					MessageImpl extension = new MessageImpl();
+					extension.setParent(message);
+					extension.setName(localName);
+					extension.setParts(message.getParts());
+					extension.setDefinition(message.getDefinition());
+					message = extension;
 				}
 				if (operationChild.getLocalName().equals("input")) {
 					operation.setInput(message);

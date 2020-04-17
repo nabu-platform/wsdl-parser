@@ -8,6 +8,7 @@ import be.nabu.libs.wsdl.api.MessagePart;
 
 public class MessageImpl extends FragmentImpl implements Message {
 
+	private Message parent;
 	private List<MessagePart> parts = new ArrayList<MessagePart>();
 	
 	@Override
@@ -17,5 +18,13 @@ public class MessageImpl extends FragmentImpl implements Message {
 	public void setParts(List<MessagePart> parts) {
 		this.parts = parts;
 	}
-
+	
+	@Override
+	public Message getParent() {
+		return parent;
+	}
+	public void setParent(Message parent) {
+		this.parent = parent;
+	}
+	
 }
