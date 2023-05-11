@@ -416,6 +416,10 @@ public class WSDLParser {
 			
 			for (Element operationChild : getChildren(child)) {
 				String messageName = operationChild.getAttribute("message");
+				// 2023-04-12: might be a documentation element or an invalid wsdl, either way, we don't want to fail
+				if (messageName == null || messageName.trim().isEmpty()) {
+					continue;
+				}
 				int separator = messageName.indexOf(':');
 				String namespace = operationChild.lookupNamespaceURI(separator < 0 ? null : messageName.substring(0, separator));
 				if (separator >= 0) {
